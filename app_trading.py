@@ -125,19 +125,19 @@ if authentication_status:
         st.image("logo.png", use_container_width=True)
         st.divider()
 
-        st.header("Configuración")
+        st.header("Settings")
 
         #NOTA IMPORTANTE: 
         #Dado que Gemini es el motor de la app para varias cosas (análisis técnico, búsqueda de ticker, análisis de noticias, sentiment scoring, Google Search tool)
         #Google AI Studio impone un límite diario o por minuto a las llamadas a su servidor, por lo que la API Key esta pensada para solo UN USUARIO, por temas de desgaste.
         #Ademas que puede ser usada malintencionadamente y esta ligada a mi cuenta personal de Google.
 
-        api_key = st.text_input("Ingresa tu API Key de Gemini:", type="password")
+        api_key = st.text_input("Insert your Google AI Studio API Key:", type="password")
         #Esto SOLO si tuviera pro, pero como no lo tengo, en INICIALIZACIÓN, python escoje por su cuenta el modelo flash.
         #Es decir, en la app sale debajo de la apikey una caja de opciones, pero da igual la q escojas.
-        modelo_seleccionado = st.selectbox("Modelo", ["gemini-2.5-flash", "gemini-2.5-pro"]) 
-        st.info("Esta app usa Yahoo Finance + otras APIs para datos reales y Gemini para el análisis.")
-        st.info("Ahora con Búsqueda en Google en tiempo real.")
+        modelo_seleccionado = st.selectbox("Model", ["gemini-2.5-flash", "gemini-2.5-pro"]) 
+        st.info("This app is powered by Gemini AI, Yahoo Finance and others' APIs to gather and digest the data.")
+        st.info("Tools: Gemini's DeepSearch")
 
     #-------------------------------------------------APARTADO DE FUNCIONES---------------------------------------------------
     def scanner_oportunidades(tickers):
@@ -581,7 +581,7 @@ if authentication_status:
             client = genai.Client(api_key=api_key)
             modelos = client.models.list()
             nombre_real = next((m.name for m in modelos if "flash" in m.name.lower()), "gemini-2.5-flash")
-            st.sidebar.success(f"Conectado a: {nombre_real}")
+            st.sidebar.success(f"Connected to: {nombre_real}")
         except Exception as e:
             st.sidebar.error(f"Error de conexión: {e}")
             st.stop()
@@ -2728,19 +2728,16 @@ if authentication_status:
 
                             st.divider()
 
-
-                            st.subheader("Market Intelligence")
-                            st.info("The stock market is highly complex, though at first sight seems like a gambling game, i.e., a big casino. That's why here we'll explain key concepts of the market and understand better how it works.")
-
                             st.markdown("### IPOs")
                             st.write("Most new issures are sold under ""favorable market conditions"" -which means favorable for the seller and less favorable for the buyer.  ")
                             st.write("-Benjamin Graham, The Intelligent Investor, 1973")
 
-                            st.title("🚀 Agente de Acciones & Valoración del S&P 500")
+                            st.subheader("🚀 Agente de Acciones & Valoración del S&P 500")
 
                             # =====================================================================
                             # PARTE 1: FILTRADO DE ACCIONES INDIVIDUALES (Yahoo Finance Data)
                             # =====================================================================
+                            """
                             st.header("1. Buscador y Filtro de Acciones")
 
                             # Lista de tickers iniciales por defecto (el usuario puede editarla)
@@ -2813,12 +2810,6 @@ if authentication_status:
                             # =====================================================================
                             st.header("2. Escenarios de Valoración Justa del S&P 500 (SPX)")
 
-                            st.write("""
-                            *Aquí asumas que el modelo de Gemini ya procesó el estimado anual de Earnings corporativos del índice, 
-                            los distribuyó estacionalmente por trimestre (Quarter) para los próximos 2 años en base a tendencias históricas, 
-                            y te devolvió la siguiente estructura:*
-                            """)
-
                             # Simulamos los Earnings Trimestrales en dólares que Gemini calcularía/repartiría de forma inteligente
                             # (Para producción, aquí mapeas el output JSON/diccionario de tu llamada a la API de Gemini)
                             
@@ -2854,7 +2845,8 @@ if authentication_status:
                             }))
 
                             st.info("💡 Con esta matriz de sensibilidad puedes contrastar el precio actual del SPX en el mercado y ver qué múltiplo implícito está pagando el mercado respecto a los trimestres adelantados.")
-                        
+                        """
+                            
                         with tab_corp:
                             st.subheader("Corporate Finance Hub")
                             sp100_components = {
@@ -2884,82 +2876,106 @@ if authentication_status:
                                     try:
                                         t = yf.Ticker(ticker_sym)
                                         
-                                        # Forzamos la descarga completa de fundamentales anuales
+                                        # Descarga de DataFrames de Yahoo
                                         df_balance = t.balance_sheet
                                         df_financials = t.financials
-                                        info = t.info  # .info completo, no fast_info
+                                        info = t.info
                                         
-                                        # Extracción segura: si Yahoo no tiene la cuenta, le asignamos 0 por defecto
-                                        deuda = df_balance.loc['Total Debt'].iloc[0] if 'Total Debt' in df_balance.index else 0
+                                        # ==========================================
+                                        # 1. EXTRACCIÓN DEL ESTADO DE RESULTADOS (Flujos de 1 año)
+                                        # ==========================================
                                         ebit = df_financials.loc['EBIT'].iloc[0] if 'EBIT' in df_financials.index else 0
                                         interest = df_financials.loc['Interest Expense'].iloc[0] if 'Interest Expense' in df_financials.index else 0
-                                        beta = info.get('beta', 1.0)
-                                        market_cap = info.get('marketCap', 0)
                                         
                                         if 'Tax Rate for Calcs' in df_financials.index:
                                             tax_rate = df_financials.loc['Tax Rate for Calcs'].iloc[0]
-                                            # Si por alguna razón da NaN (Not a Number), lo rescatamos con un fallback de 30%
-                                            if pd.isna(tax_rate):
-                                                tax_rate = 0.30
+                                            if pd.isna(tax_rate): tax_rate = 0.30
                                         else:
                                             tax_rate = 0.30
+
+                                        # ==========================================
+                                        # 2. EXTRACCIÓN DEL BALANCE GENERAL (Fotos y Promedios)
+                                        # ==========================================
+                                        # A) DEUDA
+                                        deuda_actual = df_balance.loc['Total Debt'].iloc[0] if 'Total Debt' in df_balance.index else 0
+                                        # Verificamos si hay datos del año pasado (más de 1 columna)
+                                        if 'Total Debt' in df_balance.index and df_balance.shape[1] > 1:
+                                            deuda_anterior = df_balance.loc['Total Debt'].iloc[1]
+                                            if pd.isna(deuda_anterior): deuda_anterior = deuda_actual
+                                        else:
+                                            deuda_anterior = deuda_actual # Fallback si no hay historial
+                                            
+                                        deuda_promedio = (deuda_actual + deuda_anterior) / 2
+
+                                        # B) PATRIMONIO (Stockholders Equity) - ¡Necesario para el ROIC!
+                                        patrimonio_actual = df_balance.loc['Stockholders Equity'].iloc[0] if 'Stockholders Equity' in df_balance.index else 0
+                                        if 'Stockholders Equity' in df_balance.index and df_balance.shape[1] > 1:
+                                            patrimonio_anterior = df_balance.loc['Stockholders Equity'].iloc[1]
+                                            if pd.isna(patrimonio_anterior): patrimonio_anterior = patrimonio_actual
+                                        else:
+                                            patrimonio_anterior = patrimonio_actual
+                                            
+                                        patrimonio_promedio = (patrimonio_actual + patrimonio_anterior) / 2
+
+                                        # ==========================================
+                                        # 3. EXTRACCIÓN DE MERCADO (Info)
+                                        # ==========================================
+                                        beta = info.get('beta', 1.0)
+                                        market_cap = info.get('marketCap', 0)
                                         
-                                        # Guardamos los datos crudos en una lista
+                                        # ==========================================
+                                        # 4. GUARDADO DE DATOS (Todo en Millones $M)
+                                        # ==========================================
                                         resultados_lote.append({
                                             'Ticker': ticker_sym,
-                                            'Market Cap ($B)': round(market_cap / 1e9, 2),
+                                            'Market Cap ($M)': round(market_cap / 1e6, 2),
                                             'Beta': beta,
-                                            'Total Debt ($M)': round(deuda / 1e6, 2),
+                                            # Usamos los promedios para mayor rigor financiero
+                                            'Deuda Promedio ($M)': round(deuda_promedio / 1e6, 2),
+                                            'Patrimonio Promedio ($M)': round(patrimonio_promedio / 1e6, 2),
+                                            # Guardamos también la deuda actual por si la necesitas para ponderar el WACC actual
+                                            'Deuda Actual ($M)': round(deuda_actual / 1e6, 2), 
                                             'EBIT ($M)': round(ebit / 1e6, 2),
                                             'Interest Expense ($M)': round(interest / 1e6, 2),
                                             'Tax Rate': round(tax_rate, 4)
                                         })
+                                        
                                     except Exception as e:
-                                        # Si una empresa falla en Yahoo (caída de red momentánea), el programa no se detiene, pasa a la siguiente
+                                        # Si una empresa falla, pasa a la siguiente
                                         continue
                                         
                                 return resultados_lote
 
-                            def escanear_en_lotes(tickers, lote=25, pause_sec=2):
-                                """
-                                Toma la lista completa de tickers, los corta en lotes de 25 y se los pasa al 
-                                'obrero' metiendo pausas intermedias para engañar a Yahoo Finance.
-                                """
+                            def escanear_en_lotes(tickers, tamano_lote=25, pause_sec=2):
                                 resultados_totales = []
-                                
-                                # Contenedores visuales en Streamlit para monitorear la carga en vivo
                                 progreso_bar = st.progress(0)
                                 texto_estado = st.empty()
                                 
-                                for i in range(0, len(tickers), lote):
-                                    # Cortamos el sub-lote actual (ej: del index 0 al 25)
-                                    sub_lote = tickers[i : i + lote]
+                                for i in range(0, len(tickers), tamano_lote):
+                                    sub_lote = tickers[i : i + tamano_lote]
+                                    texto_estado.text(f"⏳ Batch processing {int(i/tamano_lote) + 1}... Analizando: {', '.join(sub_lote)}")
                                     
-                                    texto_estado.text(f"⏳ Procesando lote {int(i/lote) + 1}... Analizando: {', '.join(sub_lote)}")
-                                    
-                                    # 🟢 LLAMAMOS AL OBRERO: Le pasamos los 25 tickers para que extraiga los datos
-                                    datos_de_este_lote = scanner_oportunidades(sub_lote)
-                                    
-                                    # Acumulamos las respuestas en nuestra lista maestra
+                                    datos_de_este_lote = corporate_data(sub_lote)
                                     resultados_totales.extend(datos_de_este_lote)
                                     
-                                    # Actualizamos la barra de progreso visualmente
-                                    porcentaje = min((i + lote) / len(tickers), 1.0)
+                                    porcentaje = min((i + tamano_lote) / len(tickers), 1.0)
                                     progreso_bar.progress(porcentaje)
                                     
-                                    # Pausa estratégica: Espera 2 segundos antes del siguiente lote (menos en el último bloque)
-                                    if i + lote < len(tickers):
+                                    if i + tamano_lote < len(tickers):
                                         time.sleep(pause_sec)
-                                # Limpiamos los textos de carga cuando termina todo el bucle
+                                        
                                 texto_estado.empty()
                                 progreso_bar.empty()
-                                
                                 return resultados_totales
+                            
+                            # ==============================================================================
+                            # 4. CAPA DE CACHÉ
+                            # ==============================================================================
 
                             @st.cache_data(ttl=3600)  # cachea 1h para no re-descargar en cada rerun de Streamlit
                             
                             def ejecutar_analisis_cached(lista_tickers):
-                                return escanear_en_lotes(lista_tickers, lote=25, pause_sec=2)
+                                return escanear_en_lotes(lista_tickers, tamano_lote=25, pause_sec=2)
 
                             fuente_tickers = st.radio("Tickers source:", ["📋 Use my Watchlist", "Use S&P 100"], horizontal=True)
 
@@ -2971,55 +2987,157 @@ if authentication_status:
                                 lista_final = sp100_tickers
                                 st.info(f"Se analizarán las {len(lista_final)} empresas del S&P 100 en lotes de 25, con 2s de pausa entre lotes (~8 lotes, un par de minutos en total).")
                             
-                            if st.button("🚀 Ejecutar Escáner Corporativo"):
+                            # =========================
+                            # Market Risk Premium
+                            # =========================
+
+                            # Obtener rendimiento del Treasury 10Y
+                            try:
+                                bono_10a = yf.Ticker("^TNX")
+                                rf_actual = bono_10a.fast_info.get("previousClose", 4.25)
+                            except:
+                                rf_actual = 4.25
+
+                            st.markdown("### Market Risk Premium")
+                            st.write("To calculate the CAPM, please type your premium")
+
+                            col1, col2 = st.columns(2)
+
+                            with col1:
+                                rf = st.number_input(
+                                    "Risk-Free Rate (%)",
+                                    value=float(rf_actual),
+                                    step=0.10
+                                ) / 100
+
+                            with col2:
+                                market_risk_premium = st.number_input(
+                                    "Market Risk Premium (%)",
+                                    value= 10 - rf_actual,
+                                    step=0.10
+                                ) / 100
+
+                            st.caption(f"10Y Treasury Bond yield: **{rf_actual:.2f}%**")
+                            st.caption("Source: Yahoo Finance")
+
+
+                            if st.button("🚀 Search for Economic Value opportunities"):
                                 if not lista_final:
                                     st.warning("La lista de tickers está vacía. Por favor introduce datos válidos.")
                                 else:
-                                    with st.spinner("Descargando fundamentales y procesando finanzas corporativas..."):
-                                        # 1. Llamamos a la función con caché integrada
+                                    with st.spinner("Downloading fundamentals..."):
+                                        
                                         datos_crudos = ejecutar_analisis_cached(lista_final)
                                         
-                                        if datos_crudos:
-                                            # Convertimos la lista de diccionarios en un DataFrame limpio de Pandas
+                                        if datos_crudos and len(datos_crudos) > 0:
                                             df_resultados = pd.DataFrame(datos_crudos)
                                             
-                                            # 2. Descargamos la tasa del bono del tesoro a 10 años (^TNX) para la Tasa Libre de Riesgo (Rf)
-                                            try:
-                                                bono_10a = yf.Ticker("^TNX")
-                                                rf = bono_10a.fast_info.get('previousClose', 0) / 100
-                                            except:
-                                                rf = 0.0425  # Si falla Yahoo, dejamos un 4.25% como fallback de seguridad
+                                            # 🛡️ BLINDAJE: Verificación de seguridad de columnas
+                                            columnas_verificar = {
+                                                'Beta': 1.0, 'Market Cap ($M)': 0.0, 'Deuda Actual ($M)': 0.0, 
+                                                'Deuda Promedio ($M)': 0.0, 'Patrimonio Promedio ($M)': 0.0, 
+                                                'EBIT ($M)': 0.0, 'Interest Expense ($M)': 0.0, 'Tax Rate': 0.30
+                                            }
+                                            for col, val_defecto in columnas_verificar.items():
+                                                if col not in df_resultados.columns:
+                                                    df_resultados[col] = val_defecto
+                                                else:
+                                                    df_resultados[col] = df_resultados[col].fillna(val_defecto)
                                             
-                                            rm = 0.10  # Asumimos una tasa de retorno promedio del mercado (Rm) del 10%
+                                            # 🛑 FILTRADO DE CALIDAD DE DATOS
+                                            condicion_data_incompleta = (df_resultados['Deuda Promedio ($M)'] > 0) & (df_resultados['Interest Expense ($M)'] == 0)
                                             
-                                            # 3. CÁLCULOS MATEMÁTICOS CORPORATIVOS MASIVOS EN PANDAS
-                                            # A) Costo del Equity usando CAPM -> Ke = Rf + Beta * (Rm - Rf)
-                                            df_resultados['Ke (CAPM)'] = rf + df_resultados['Beta'] * (rm - rf)
+                                            df_excluidas_data = df_resultados[condicion_data_incompleta]
+                                            df_filtrado_valido = df_resultados[~condicion_data_incompleta].copy()
                                             
-                                            # B) Costo de la Deuda Bruto -> Kd = Gastos financieros / Deuda Total
-                                            df_resultados['Kd Bruto'] = df_resultados.apply(
-                                                lambda row: row['Interest Expense ($M)'] / row['Total Debt ($M)'] if row['Total Debt ($M)'] > 0 else 0, axis=1
-                                            )
-                                            
-                                            # C) Costo de la Deuda Neto -> Afectado por el Escudo Fiscal: Kd * (1 - Tax Rate)
-                                            df_resultados['Kd Neto'] = df_resultados['Kd Bruto'] * (1 - df_resultados['Tax Rate'])
-                                            
-                                            # 4. FORMATEO Y DESPLIEGUE FINAL EN LA APLICACIÓN
-                                            st.success(f"¡Análisis completo! Se escanearon {len(df_resultados)} empresas de forma segura.")
-                                            
-                                            # Clonamos el dataframe original para formatear los datos de cara al usuario
-                                            df_vista = df_resultados.copy()
-                                            df_vista['Ke (CAPM)'] = df_vista['Ke (CAPM)'].map(lambda x: f"{x*100:.2f}%")
-                                            df_vista['Kd Neto'] = df_vista['Kd Neto'].map(lambda x: f"{x*100:.2f}%")
-                                            df_vista['Tax Rate'] = df_vista['Tax Rate'].map(lambda x: f"{x*100:.2f}%")
-                                            
-                                            # Mostramos la tabla final ordenada por Ticker con las columnas más importantes
-                                            st.dataframe(
-                                                df_vista[['Ticker', 'Market Cap ($B)', 'Beta', 'Ke (CAPM)', 'Total Debt ($M)', 'Kd Neto', 'Tax Rate']], 
-                                                use_container_width=True
-                                            )
+                                            lista_excluidas = df_excluidas_data['Ticker'].tolist()
+
+                                            # ==========================================
+                                            # 🟢 CONTROL DE FLUJO: VALIDAR SI HAY DATOS
+                                            # ==========================================
+                                            if not df_filtrado_valido.empty:
+                                                
+                                                # A) Ke (CAPM)
+                                                df_filtrado_valido['Ke'] = rf + df_filtrado_valido['Beta'] * market_risk_premium
+                                                
+                                                # B) Kd Bruto y Kd Neto (Con ahorro fiscal)
+                                                df_filtrado_valido['Kd Bruto'] = df_filtrado_valido.apply(
+                                                    lambda r: r['Interest Expense ($M)'] / r['Deuda Promedio ($M)'] if r['Deuda Promedio ($M)'] > 0 else 0.0, axis=1
+                                                )
+                                                df_filtrado_valido['Kd Neto'] = df_filtrado_valido['Kd Bruto'] * (1 - df_filtrado_valido['Tax Rate'])
+                                                
+                                                # C) Ponderaciones WACC (Con Deuda Actual)
+                                                df_filtrado_valido['Firm Value (V)'] = df_filtrado_valido['Market Cap ($M)'] + df_filtrado_valido['Deuda Actual ($M)']
+                                                df_filtrado_valido['We'] = df_filtrado_valido.apply(lambda r: r['Market Cap ($M)'] / r['Firm Value (V)'] if r['Firm Value (V)'] > 0 else 1.0, axis=1)
+                                                df_filtrado_valido['Wd'] = df_filtrado_valido.apply(lambda r: r['Deuda Actual ($M)'] / r['Firm Value (V)'] if r['Firm Value (V)'] > 0 else 0.0, axis=1)
+                                                
+                                                # D) WACC 
+                                                df_filtrado_valido['WACC'] = (df_filtrado_valido['Ke'] * df_filtrado_valido['We']) + (df_filtrado_valido['Kd Neto'] * df_filtrado_valido['Wd'])
+                                                
+                                                # E) ROIC (Con promedios contables)
+                                                df_filtrado_valido['NOPAT'] = df_filtrado_valido['EBIT ($M)'] * (1 - df_filtrado_valido['Tax Rate'])
+                                                df_filtrado_valido['Capital Invertido Promedio'] = df_filtrado_valido['Deuda Promedio ($M)'] + df_filtrado_valido['Patrimonio Promedio ($M)']
+                                                df_filtrado_valido['ROIC'] = df_filtrado_valido.apply(
+                                                    lambda r: r['NOPAT'] / r['Capital Invertido Promedio'] if r['Capital Invertido Promedio'] > 0 else 0.0, axis=1
+                                                )
+                                                
+                                                # F) SPREAD
+                                                df_filtrado_valido['Spread (ROIC - WACC)'] = df_filtrado_valido['ROIC'] - df_filtrado_valido['WACC']
+                                                
+                                                # G) OBTENER EL TOP 10
+                                                df_top10 = df_filtrado_valido.sort_values(by='Spread (ROIC - WACC)', ascending=False).head(10).copy()
+                                                
+                                                # H) CALCULAR MEDIAS DESCRIPTIVAS (Exclusivas del TOP 10)
+                                                media_roic = df_top10['ROIC'].mean()
+                                                media_wacc = df_top10['WACC'].mean()
+                                                media_spread = df_top10['Spread (ROIC - WACC)'].mean()
+                                                
+                                                # ==========================================
+                                                # 4. DESPLIEGUE FINAL EN PANTALLA (DENTRO DEL IF)
+                                                # ==========================================
+                                                st.balloons()
+                                                st.success(f"🎯 Complex analysis terminated. Evaluated: {len(df_filtrado_valido)} firms.")
+                                                
+                                                # Tarjetas de Estadísticas
+                                                st.markdown("### 📊 Descriptive statistics (TOP 10)")
+                                                col1, col2, col3 = st.columns(3)
+                                                col1.metric("Average ROIC", f"{media_roic*100:.2f}%")
+                                                col2.metric("Average WACC", f"{media_wacc*100:.2f}%")
+                                                col3.metric("Average Spread", f"{media_spread*100:.2f}%", delta=f"{media_spread*100:.2f}%")
+                                                
+                                                st.markdown("---")
+                                                st.markdown("### 🏆 Top 10: Firms with the highest Value of Growth")
+                                                
+                                                # Construcción del DataFrame visual estructurado
+                                                df_vista = pd.DataFrame()
+                                                df_vista['Ticker'] = df_top10['Ticker']
+                                                df_vista['Spread'] = df_top10['Spread (ROIC - WACC)'].map(lambda x: f"{x*100:.2f}%")
+                                                df_vista['ROIC'] = df_top10['ROIC'].map(lambda x: f"{x*100:.2f}%")
+                                                df_vista['WACC'] = df_top10['WACC'].map(lambda x: f"{x*100:.2f}%")
+                                                df_vista['Ke (CAPM)'] = df_top10['Ke'].map(lambda x: f"{x*100:.2f}%")
+                                                df_vista['Kd'] = df_top10['Kd Neto'].map(lambda x: f"{x*100:.2f}%")
+                                                df_vista['W_e (Equity%)'] = df_top10['We'].map(lambda x: f"{x*100:.1f}%")
+                                                df_vista['W_d (Deuda%)'] = df_top10['Wd'].map(lambda x: f"{x*100:.1f}%")
+                                                df_vista['Market Cap'] = df_top10['Market Cap ($M)'].map(lambda x: f"${x/1000:.2f}B" if x >= 1000 else f"${x:.2f}M")
+                                                
+                                                # Renderizar la tabla limpia en Streamlit
+                                                st.dataframe(df_vista, use_container_width=True, hide_index=True)
+                                                
+                                                # Nota de auditoría por si excluimos empresas con data rota
+                                                if lista_excluidas:
+                                                    st.markdown("---")
+                                                    st.warning(
+                                                        f"⚠️ **Nota de auditoría de datos:** Las siguientes empresas ({', '.join(lista_excluidas)}) "
+                                                        f"fueron **excluidas del ranking** debido a inconsistencias en la fuente de datos. "
+                                                        f"Yahoo Finance reportó que tenían Deuda activa pero registró un gasto por intereses (`Interest Expense`) de $0, "
+                                                        f"lo que habría generado métricas de WACC sesgadas y poco realistas."
+                                                    )
+                                            else:
+                                                st.error("❌ Tras aplicar los filtros de calidad, no quedaron empresas con datos financieros válidos en este lote.")
+                                                if lista_excluidas:
+                                                    st.info(f"Empresas descartadas en este intento: {', '.join(lista_excluidas)}")
                                         else:
-                                            st.error("Error: No se pudo recolectar información de los tickers provistos.")
+                                            st.error("❌ Error: No se pudieron extraer datos de la API de Yahoo Finance.")
                 
                 except Exception as error_yahoo:
                     st.error(f"Error al correr el programa: {error_yahoo}")
@@ -3027,13 +3145,13 @@ if authentication_status:
             st.info("🔍 Ingresa un Ticker para comenzar el análisis.")
 
     else:
-        st.warning("Por favor, ingresa tu API Key en la barra lateral para comenzar.")
+        st.warning("Please insert your API key on the sidebar to initialize.")
 
 elif authentication_status == False:
-    st.error('Usuario o contraseña incorrectos')
+    st.error('User or password inaccurates')
 
 elif authentication_status == None:
-    st.warning('Por favor, ingresa tu usuario y contraseña para acceder.')
+    st.warning('Introduce your user and password to start.')
 
 #Para CORRER el código: python -m streamlit run app.py
 #Para DETENER el programa: Control + C
