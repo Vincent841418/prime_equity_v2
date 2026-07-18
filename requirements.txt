@@ -1,0 +1,11 @@
+streamlit
+streamlit-authenticator
+pyyaml
+yfinance
+google-genai
+pandas
+plotly
+PyPDF2
+pypdf
+numpy
+fredapi
