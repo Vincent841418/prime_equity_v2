@@ -20,6 +20,7 @@ from datetime import datetime #Dentro de la libreria datetime, hay una funcion e
 import json #pip install json
 import os
 import pytz
+import traceback
 import PyPDF2
 import numpy as np
 import plotly.express as px
@@ -2765,7 +2766,7 @@ if authentication_status:
                                     "LMT", "MMM", "NSC", "PCAR", "RTX", "TDG", "UBER", "UNP", "UPS", "WM"
                                 ],
                                 "Consumer Staples": [
-                                    "ADM", "CL", "COST", "EL", "KLY", "KO", "KR", "MDLZ", "MO", "PEP", 
+                                    "ADM", "CL", "COST", "EL", "KMB", "KO", "KR", "MDLZ", "MO", "PEP", 
                                     "PG", "PM", "TGT", "WMT"
                                 ],
                                 "Energy": [
@@ -2837,8 +2838,42 @@ if authentication_status:
                                         # ==========================================
                                         # 3. EXTRACCIÓN DE MERCADO (Info)
                                         # ==========================================
-                                        beta = info.get('beta', 1.0)
-                                        market_cap = info.get('marketCap', 0)
+                                        # ==========================================
+                                        # 3. EXTRACCIÓN DE MERCADO (Info & Fallbacks)
+                                        # ==========================================
+                                        beta = info.get('beta', 1.0) if info else 1.0
+                                        if beta is None or pd.isna(beta): beta = 1.0
+
+                                        # Intento 1: Desde info genérico
+                                        market_cap = info.get('marketCap', 0) if info else 0
+
+                                        # Intento 2: Si falla info, usamos fast_info de yfinance
+                                        if not market_cap or market_cap == 0:
+                                            try:
+                                              market_cap = t.fast_info.get('market_cap', 0)
+                                            except:
+                                              market_cap = 0
+
+                                        # Intento 3: Cálculo manual de emergencia (Precio actual * Acciones en circulación)
+                                        if not market_cap or market_cap == 0:
+                                          try:
+                                            shares = info.get(
+                                                'sharesOutstanding', 0
+                                            )
+                                            precio_ult = (
+                                                df_financials.iloc[-1, 0]
+                                                if not df_financials.empty
+                                                else 0
+                                            )  # O del history
+                                            # Intentamos sacar el precio de cierre más fresco del history si se puede
+                                            hist_temp = t.history(period="5d")
+                                            if not hist_temp.empty:
+                                              precio_ult = hist_temp[
+                                                  "Close"
+                                              ].iloc[-1]
+                                              market_cap = shares * precio_ult
+                                          except:
+                                            pass
                                         
                                         # ==========================================
                                         # 4. GUARDADO DE DATOS (Todo en Millones $M)
@@ -2870,7 +2905,7 @@ if authentication_status:
                                 
                                 for i in range(0, len(tickers), tamano_lote):
                                     sub_lote = tickers[i : i + tamano_lote]
-                                    texto_estado.text(f"⏳ Batch processing {int(i/tamano_lote) + 1}... Analizando: {', '.join(sub_lote)}")
+                                    texto_estado.text(f"⏳ Batch processing {int(i/tamano_lote) + 1}... Analyzing: {', '.join(sub_lote)}")
                                     
                                     datos_de_este_lote = corporate_data(sub_lote)
                                     resultados_totales.extend(datos_de_este_lote)
@@ -2894,7 +2929,7 @@ if authentication_status:
                             def ejecutar_analisis_cached(lista_tickers):
                                 return escanear_en_lotes(lista_tickers, tamano_lote=25, pause_sec=2)
 
-                            fuente_tickers = st.radio("Tickers source:", ["📋 Use my Watchlist", "Use S&P 100"], horizontal=True)
+                            fuente_tickers = st.radio("Tickers source:", ["📋 Use my Watchlist", "Use S&P 200"], horizontal=True)
 
                             if fuente_tickers == "📋 Use my Watchlist":
                                 input_raw = st.text_area("Paste your watchlist:", key="corp_hub_watchlist_input")
@@ -2902,8 +2937,28 @@ if authentication_status:
                                 lista_final = [t.strip().upper() for t in input_raw.split() if t.strip()] if input_raw else []
                             else:
                                 lista_final = sp200_tickers
-                                st.info(f"Se analizarán las {len(lista_final)} empresas del S&P 200 en lotes de 25, con 2s de pausa entre lotes (~8 lotes, un par de minutos en total).")
+                                st.info(f"The script will analyze {len(lista_final)} firms from the S&P 200 in batchs of 25, with a 2s pause between each (~8 batches, will take a couple minutes).")
+
+                            with st.expander("Key Concepts"):
+                                with st.expander("ROIC"):
+                                    st.write("EBIT = Earnings Before Interests and Taxes. The factor (1-t) represents the fiscal shield as the real cost of debt (because it is deductible from taxes). ")                 
                             
+                            with st.expander("Methodology:"):
+                                st.info("In order for this analysis to be accurate, we recommend not to use stocks belonging to Financials or Utilities sectors. This because firms from both sectors could give false or misreading lectures on the Fundamentals used.")
+
+                                with st.expander("Financials"):
+                                    st.write("ROIC" \
+                                    "The ROIC was made for firms that use debt as funding, not the 'product' financial institutions offer." \
+                                    "Deposits are written as Debt in the Balance Sheet, but it is the core of the bank's business. Every bank in the world is leveraged by using those deposits as hedge to lend it at a higher rate. " \
+                                    "In simple, banks pay R1 (deposits' rates) and charges R2 (loans' rates). The difference R2-R1 gives the Risk Premium for lending. " \
+                                    "ROIC's main idea: Ignore debt and focus only whether the firm is profitable or not. However, a bank's debt (interest paid to depositors) because it is an OPERATIVE EXPENSE. " \
+                                    "While calculating the NOPAT, it will not consider this expense as it's qualified as Debt in the books. Hence a bad NOPAT gives a false ROIC. " \
+                                    "Therefore, with banks it's recommended ROE over ROIC.")
+
+                                with st.expander("Utilities"):
+                                    st.write("")
+
+
                             # =========================
                             # Market Risk Premium
                             # =========================
@@ -3070,14 +3125,13 @@ if authentication_status:
                                                 
                                                 st.dataframe(df_vista, use_container_width=True, hide_index=True)
 
-                                                st.error("❌ After applying quality filters, no companies with valid financial data remained in this batch.")
                                                 if lista_excluidas:
                                                     st.markdown("---")
                                                     st.warning(
                                                         f"⚠️ **Data Audit Note:** The following companies ({', '.join(lista_excluidas)}) "
                                                         f"were **excluded from ranking** due to missing or non-positive core financial metrics."
                                                     )
-                                                    st.markdown("**Detalle por empresa:**")
+                                                    st.markdown("**Detail per company:**")
                                                     for ticker in lista_excluidas:
                                                         variables_ticker = ', '.join(dict_motivos_exclusion[ticker])
                                                         st.write(f"- **{ticker}**: {variables_ticker}")
@@ -3090,6 +3144,7 @@ if authentication_status:
                 
                 except Exception as error_yahoo:
                     st.error(f"Error al correr el programa: {error_yahoo}")
+                    st.code(traceback.format_exc())
         else:
             st.info("🔍 Ingresa un Ticker para comenzar el análisis.")
 
